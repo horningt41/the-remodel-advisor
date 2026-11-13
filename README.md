@@ -40,7 +40,7 @@ Shared pieces are filled in by JS: `<span data-icon="name">` becomes an icon, an
 | `square-config` | Tells the page whether Square is connected (`ready`) |
 | `square-availability` | Open times for a service on a date |
 | `square-book` | Creates the customer and appointment, charges the card, cancels the appointment if the charge fails |
-| `square-oauth-start` / `square-oauth-callback` | One-time connection to Ted's Square account (OAuth, buyer-level scopes, so it works on Square Appointments Free) |
+| `square-oauth-start` / `square-oauth-callback` | One-time connection to Ted's Square account (OAuth; includes read-only catalog access to validate service variation IDs, and buyer-level appointment scopes for Square Appointments Free) |
 
 Netlify environment variables: `SQUARE_ENVIRONMENT=production`, `SQUARE_APPLICATION_ID`, `SQUARE_APPLICATION_SECRET`, `SQUARE_LOCATION_ID`, `SQUARE_OAUTH_SETUP_KEY` (password for the connect link, username `square-admin`), and optionally `SQUARE_MERCHANT_ID` to lock the connection to Ted's account. Tokens live in Netlify Blobs (`square-booking-production`) and refresh automatically.
 

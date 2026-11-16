@@ -34,10 +34,10 @@
         <div>
           <p class="eyebrow">Custom woodworking</p>
           <h1>Handmade hardwood pieces, <em>built to order.</em></h1>
-          <p class="lede">Alongside consulting, I build custom pieces in my shop: cutting boards, coasters, table tops, and small furniture. The list below is where most requests start, not where they stop. If it's made of wood, ask.</p>
+          <p class="lede">Alongside consulting, I build pieces in my shop: cutting boards, coasters, table tops, and small furniture. Buy one that's finished and ready, or have one built to your size and wood. If it's made of wood, ask.</p>
           <div class="btn-row">
-            <a class="btn" href="#request">Request a Custom Piece <span data-icon="arrow"></span></a>
-            <a class="btn btn--ghost" href="#work">See the Work</a>
+            <a class="btn" href="#shop">Shop Finished Pieces <span data-icon="arrow"></span></a>
+            <a class="btn btn--ghost" href="#request">Request a Custom Piece</a>
           </div>
           <ul class="hero__facts">
             <li><span data-icon="hammer"></span>Made by hand, one at a time</li>
@@ -59,11 +59,25 @@
       </div>
     </section>
 
+    <!-- Shop: listings come from the "Shop" category in Square (js/shop.js) -->
+    <section class="section" id="shop">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="eyebrow">Shop</p>
+          <h2>Finished and ready to go home.</h2>
+          <p>Pieces I've built and listed for sale. One-of-a-kind pieces come off the list as soon as they sell.</p>
+        </div>
+        <p class="shop-status" id="shop-status" role="status">Loading pieces for sale…</p>
+        <div class="shop" id="shop-grid" hidden></div>
+        <p class="shop-note">Small pieces can ship. Large pieces are local pickup or delivery around Greater Cincinnati, arranged after you order. Want it in a different size or wood? <a href="#request">Request a custom version</a>.</p>
+      </div>
+    </section>
+
     <!-- What I make -->
     <section class="section section--card" id="makes">
       <div class="container">
         <div class="section-head reveal">
-          <p class="eyebrow">What I make</p>
+          <p class="eyebrow">Made to order</p>
           <h2>A few places to start.</h2>
           <p>Every piece is built for the person ordering it: your dimensions, your wood, your finish. Prices depend on size and species, so these are starting points.</p>
         </div>
@@ -407,6 +421,7 @@
 
   <div id="site-footer"></div>
 
+  <script src="js/shop.js"></script>
   <script>
     (function () {
       const form = document.getElementById("wood-form");

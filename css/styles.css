@@ -724,3 +724,55 @@ strong { font-weight: 600; }
 .js .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }
 .js .reveal.is-in { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) { .js .reveal { opacity: 1; transform: none; transition: none; } }
+
+/* Shop: pieces listed for sale in Square, shown as tagged cards; each opens a piece page */
+.shop-status { margin: 0; max-width: 52rem; padding: 14px 16px; border-radius: 10px; background: var(--paper-2); color: var(--ink-2); }
+.shop-status a { font-weight: 600; }
+.shop { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px 20px; }
+.shop-card { position: relative; display: grid; gap: 12px; align-content: start; min-width: 0; color: inherit; text-decoration: none; }
+.shop-card:hover { text-decoration: none; }
+.shop-card__media { position: relative; overflow: hidden; border-radius: 16px; background: var(--paper-2); aspect-ratio: 4 / 3; }
+.shop-card__media img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.35s ease; }
+.shop-card:hover .shop-card__media img { transform: scale(1.03); }
+.shop-card:focus-visible { outline: 3px solid var(--brass); outline-offset: 4px; border-radius: 16px; }
+.shop-card__empty { display: grid; place-items: center; height: 100%; font: 500 0.8rem var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+.shop-card__tags { position: absolute; top: 12px; left: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+.shop-tag { display: inline-block; padding: 5px 9px; border-radius: 99px; background: var(--card); color: var(--ink); font: 500 0.72rem/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; box-shadow: 0 1px 2px rgb(23 32 28 / 12%); }
+.shop-tag--sold { background: var(--ink); color: var(--paper); }
+.shop-tag--one { background: var(--brass); color: var(--ink); }
+.shop-card__body { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.shop-card__name { margin: 0; font: 600 1.08rem/1.3 var(--font-head); }
+.shop-card__price { font: 600 1rem/1 var(--font-mono); color: var(--green-900); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.shop-card--sold .shop-card__media img { filter: grayscale(0.6); opacity: 0.7; }
+.shop-card--sold .shop-card__price { color: var(--ink-2); text-decoration: line-through; }
+.shop-note { margin: 28px 0 0; font-size: 0.95rem; color: var(--ink-2); max-width: 62ch; }
+@media (max-width: 980px) { .shop { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .shop { grid-template-columns: 1fr; } }
+
+/* Piece page: photos on the left, a sticky buy panel on the right */
+.piece { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: clamp(28px, 5vw, 64px); align-items: start; }
+.piece__gallery { display: grid; gap: 12px; min-width: 0; }
+.piece__main { margin: 0; overflow: hidden; border-radius: 18px; background: var(--paper-2); aspect-ratio: 4 / 3; }
+.piece__main img { width: 100%; height: 100%; object-fit: cover; }
+.piece__thumbs { display: flex; flex-wrap: wrap; gap: 10px; }
+.piece__thumb { width: 76px; aspect-ratio: 1; padding: 0; overflow: hidden; border: 2px solid transparent; border-radius: 10px; background: var(--paper-2); cursor: pointer; }
+.piece__thumb img { width: 100%; height: 100%; object-fit: cover; }
+.piece__thumb[aria-pressed="true"] { border-color: var(--green-900); }
+.piece__thumb:focus-visible { outline: 3px solid var(--brass); outline-offset: 2px; }
+.piece__panel { position: sticky; top: 104px; display: grid; gap: 20px; min-width: 0; }
+.piece__panel h1 { font-size: clamp(2rem, 4vw, 2.8rem); margin: 0; }
+.piece__price { margin: 0; font: 600 1.6rem/1 var(--font-head); color: var(--green-900); font-variant-numeric: tabular-nums; }
+.piece__desc { margin: 0; white-space: pre-line; color: var(--ink-2); }
+.piece__buy { display: grid; gap: 16px; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); }
+.piece__buy .field select, .piece__buy .field input { width: 100%; }
+.piece__delivery { display: grid; gap: 10px; margin: 0; padding: 0; border: 0; }
+.piece__delivery legend { margin-bottom: 6px; font-weight: 600; font-size: 0.95rem; }
+.piece__delivery label { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; }
+.piece__delivery input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--green-900); flex: none; }
+.piece__delivery small { display: block; color: var(--ink-2); }
+.piece__fine { margin: 0; font-size: 0.86rem; color: var(--ink-2); }
+.piece__aside { display: grid; gap: 10px; padding-top: 18px; border-top: 1px dashed var(--line); font-size: 0.95rem; }
+.piece__aside p { margin: 0; color: var(--ink-2); }
+@media (max-width: 880px) { .piece { grid-template-columns: minmax(0, 1fr); } .piece__panel { position: static; } }
+/* These set their own display, which would otherwise override the hidden attribute */
+.field[hidden], .shop[hidden], .piece[hidden], .shop-status[hidden] { display: none; }

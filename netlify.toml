@@ -87,3 +87,15 @@
   to = "/privacy"
   status = 301
   force = true
+
+[[redirects]]
+  from = "/piece.html"
+  to = "/piece"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/order-thanks.html"
+  to = "/order-thanks"
+  status = 301
+  force = true

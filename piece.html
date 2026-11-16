@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Handmade Piece | The Remodel Advisor</title>
+  <meta name="description" content="A handmade hardwood piece from Ted Horning's shop in Greater Cincinnati, available to buy online.">
+  <meta property="og:type" content="product">
+  <meta property="og:site_name" content="The Remodel Advisor">
+  <meta property="og:title" content="Handmade Piece | The Remodel Advisor">
+  <meta property="og:image" content="https://askremodel.com/assets/img/og.png">
+  <meta name="theme-color" content="#1e3b33">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body data-page="woodworking">
+  <div id="site-header"></div>
+  <script src="js/components.js"></script>
+
+  <main id="main">
+    <section class="section section--tight">
+      <div class="container">
+        <p class="eyebrow"><a href="/woodworking#shop">Shop</a>&nbsp;/&nbsp;<span id="piece-crumb">Piece</span></p>
+        <p class="shop-status" id="piece-status" role="status">Loading this piece…</p>
+
+        <div class="piece" id="piece" hidden>
+          <div class="piece__gallery">
+            <figure class="piece__main" id="piece-main"></figure>
+            <div class="piece__thumbs" id="piece-thumbs"></div>
+          </div>
+
+          <div class="piece__panel">
+            <div class="shop-card__tags" id="piece-tags" style="position:static"></div>
+            <h1 id="piece-name"></h1>
+            <p class="piece__price" id="piece-price"></p>
+            <p class="piece__desc" id="piece-desc"></p>
+
+            <form class="piece__buy" id="piece-form" novalidate>
+              <div class="field" id="variation-field" hidden>
+                <label for="piece-variation">Option</label>
+                <select id="piece-variation" name="variation"></select>
+              </div>
+              <div class="field" id="quantity-field" hidden>
+                <label for="piece-quantity">Quantity</label>
+                <select id="piece-quantity" name="quantity"></select>
+              </div>
+              <fieldset class="piece__delivery">
+                <legend>Getting it to you</legend>
+                <label for="delivery-pickup">
+                  <input type="radio" id="delivery-pickup" name="delivery" value="pickup" checked>
+                  <span>Local pickup or delivery<small>Greater Cincinnati. I'll contact you after you order to set a time.</small></span>
+                </label>
+                <label for="delivery-ship">
+                  <input type="radio" id="delivery-ship" name="delivery" value="ship">
+                  <span><span id="delivery-ship-label">Ship it to me</span><small id="delivery-ship-note"></small></span>
+                </label>
+              </fieldset>
+              <button class="btn btn--block" id="piece-buy" type="submit">Buy Now</button>
+              <p class="booking-status" id="buy-status" role="status" hidden></p>
+              <p class="piece__fine">Checkout is handled securely by Square. Sales tax is added at checkout where it applies.</p>
+            </form>
+
+            <div class="piece__aside">
+              <p><strong>Want it in another size or wood?</strong> <a href="/woodworking?piece=other#request">Request a custom version</a>.</p>
+              <p><strong>Planning a remodel?</strong> A <a href="/book#material-selection">Material Selection session</a> helps you choose woods, finishes, and materials for the whole room.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+  <script src="js/shop.js"></script>
+</body>
+</html>

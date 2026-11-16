@@ -13,7 +13,7 @@ import {
   SQUARE_LOCATION_ID,
   SQUARE_TIME_ZONE,
 } from "../lib/square.mjs";
-import { isWithinServiceArea } from "../lib/service-area.mjs";
+import { checkServiceArea, serviceAreaMessage } from "../lib/service-area.mjs";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^\+?[0-9().\-\s]{9,24}$/;
@@ -23,7 +23,7 @@ function cleanText(value, maxLength) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
-function validAddress(value) {
+export function validAddress(value) {
   if (!value || typeof value !== "object") return null;
   const address = {
     address_line_1: cleanText(value.line1, 120),
@@ -63,8 +63,9 @@ export function validateRequest(input) {
   if (locationType === "CUSTOMER_LOCATION" && !address) {
     throw new SquareError("Enter a complete service address, including its ZIP code.", 400);
   }
-  if (address && !isWithinServiceArea(address.postal_code, address.administrative_district_level_1)) {
-    throw new SquareError("At-home appointments are limited to within 25 miles of ZIP code 45150. If you're near the edge, call (513) 409-1625 to confirm.", 400);
+  // Quick guard; the distance check itself runs in the handler (it needs a network lookup).
+  if (address && !["OH", "KY"].includes(address.administrative_district_level_1)) {
+    throw new SquareError("At-home appointments are limited to within 25 miles of ZIP code 45150. Choose a video call, or call (513) 409-1625 if you're near the edge.", 400);
   }
 
   return {
@@ -108,14 +109,21 @@ export default async function handler(request) {
   let input;
   try {
     input = validateRequest(await parseJsonBody(request));
+    if (input.address) {
+      const area = await checkServiceArea(input.address);
+      if (!area.within) return jsonResponse(400, { error: serviceAreaMessage(area) });
+    }
     if (Date.parse(input.startAt) < Date.now() + 24 * 60 * 60 * 1000) {
       return jsonResponse(409, { error: "That time no longer meets the 24-hour booking notice. Choose another time." });
     }
 
+    // Square only accepts search windows of 24 hours to 32 days, so search the
+    // day starting just before the chosen time and match that exact slot below.
+    const windowStart = Date.parse(input.startAt) - 60 * 1000;
     const availabilities = await findAvailability(
       input.service,
-      new Date(Date.parse(input.startAt) - 60 * 1000).toISOString(),
-      new Date(Date.parse(input.startAt) + 60 * 1000).toISOString(),
+      new Date(windowStart).toISOString(),
+      new Date(windowStart + 24 * 60 * 60 * 1000).toISOString(),
     );
     const slot = availabilities.find((availability) =>
       Date.parse(availability.start_at) === Date.parse(input.startAt)
@@ -159,7 +167,9 @@ export default async function handler(request) {
         booking: {
           start_at: slot.start_at,
           location_id: SQUARE_LOCATION_ID,
-          location_type: input.locationType,
+          // Square's booking location types are business, customer, or phone (no video),
+          // so video calls leave it unset; the customer note records "video consultation".
+          ...(input.locationType === "CUSTOMER_LOCATION" ? { location_type: "CUSTOMER_LOCATION" } : {}),
           ...(input.address ? { address: input.address } : {}),
           customer_id: customerResult.customer.id,
           customer_note: customerNote,

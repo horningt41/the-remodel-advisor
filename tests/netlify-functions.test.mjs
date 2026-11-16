@@ -7,6 +7,9 @@ import oauthCallback from "../netlify/functions/square-oauth-callback.mjs";
 import oauthStart from "../netlify/functions/square-oauth-start.mjs";
 
 test("Netlify handlers return standard Response objects", async () => {
+  // Netlify's build has the real Square settings but no Blobs store, so run these
+  // handlers as "not configured" to keep them from reaching for stored tokens.
+  delete process.env.SQUARE_APPLICATION_SECRET;
   const responses = await Promise.all([
     config(new Request("https://askremodel.com/.netlify/functions/square-config")),
     availability(new Request("https://askremodel.com/.netlify/functions/square-availability")),

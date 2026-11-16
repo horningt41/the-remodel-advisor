@@ -1,7 +1,5 @@
-import { randomUUID } from "node:crypto";
 import {
   findAvailability,
-  formatLocalDate,
   isSameOrigin,
   jsonResponse,
   methodNotAllowed,
@@ -13,33 +11,13 @@ import {
   SQUARE_LOCATION_ID,
   SQUARE_TIME_ZONE,
 } from "../lib/square.mjs";
+import { cleanText, validAddress } from "../lib/address.mjs";
 import { checkServiceArea, serviceAreaMessage } from "../lib/service-area.mjs";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^\+?[0-9().\-\s]{9,24}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function cleanText(value, maxLength) {
-  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
-}
-
-export function validAddress(value) {
-  if (!value || typeof value !== "object") return null;
-  const address = {
-    address_line_1: cleanText(value.line1, 120),
-    address_line_2: cleanText(value.line2, 120),
-    locality: cleanText(value.city, 80),
-    administrative_district_level_1: cleanText(value.state, 2).toUpperCase(),
-    postal_code: cleanText(value.postalCode, 12),
-    country: "US",
-  };
-  if (!address.address_line_1 || !address.locality || !/^[A-Z]{2}$/.test(address.administrative_district_level_1)
-      || !/^\d{5}(?:-\d{4})?$/.test(address.postal_code)) {
-    return null;
-  }
-  if (!address.address_line_2) delete address.address_line_2;
-  return address;
-}
+const CALL = "(513) 409-1625";
 
 export function validateRequest(input) {
   if (!input || typeof input !== "object") throw new SquareError("Complete the booking form and try again.", 400);
@@ -84,10 +62,54 @@ export function validateRequest(input) {
   };
 }
 
-async function cancelBooking(booking, idempotencyKey) {
-  if (!booking?.id) return false;
+function errorCodes(error) {
+  return error instanceof SquareError ? error.codes : [];
+}
+
+function isUncertain(error) {
+  return error instanceof SquareError && error.uncertain;
+}
+
+function pendingResponse(what) {
+  return jsonResponse(503, {
+    error: `We couldn't confirm the ${what}. Don't submit again; call ${CALL} so we can verify it.`,
+    pending: true,
+  });
+}
+
+// Reuses the Square customer with this email so repeat clients don't show up
+// as duplicates. Searching needs the CUSTOMERS_READ scope; if the search fails
+// (for example, before Square is reconnected with that scope) it creates one.
+export async function findOrCreateCustomer(input, request = squareRequest) {
   try {
-    await squareRequest(`/v2/bookings/${encodeURIComponent(booking.id)}/cancel`, {
+    const search = await request("/v2/customers/search", {
+      body: { limit: 1, query: { filter: { email_address: { exact: input.email } } } },
+    });
+    const existingId = search.customers?.[0]?.id;
+    if (existingId) return existingId;
+  } catch (error) {
+    console.error("Square customer search failed; creating a new customer", { codes: errorCodes(error) });
+  }
+
+  const result = await request("/v2/customers", {
+    body: {
+      idempotency_key: `${input.idempotencyKey}-customer`,
+      given_name: input.givenName,
+      family_name: input.familyName,
+      email_address: input.email,
+      phone_number: input.phone,
+      ...(input.address ? { address: input.address } : {}),
+    },
+  });
+  if (!result.customer?.id) {
+    throw new SquareError("Square couldn't create the customer record. Please try again.", 502);
+  }
+  return result.customer.id;
+}
+
+async function cancelBooking(booking, idempotencyKey, request) {
+  try {
+    await request(`/v2/bookings/${encodeURIComponent(booking.id)}/cancel`, {
       body: {
         booking_version: booking.version,
         idempotency_key: `${idempotencyKey}-cancel`,
@@ -95,20 +117,145 @@ async function cancelBooking(booking, idempotencyKey) {
     });
     return true;
   } catch (error) {
-    const codes = error instanceof SquareError ? error.codes : [];
-    console.error("Could not release booking after payment failure", { codes });
+    console.error("Could not release booking after payment failure", { codes: errorCodes(error) });
     return false;
   }
+}
+
+async function voidPayment(payment, request) {
+  try {
+    await request(`/v2/payments/${encodeURIComponent(payment.id)}/cancel`, { body: {} });
+    return true;
+  } catch (error) {
+    console.error("Could not void card authorization", { codes: errorCodes(error) });
+    return false;
+  }
+}
+
+// Order matters: authorize the card (a hold, no charge), then create the
+// appointment, then capture the payment. A declined card never creates an
+// appointment, so customers don't get a Square confirmation for a booking
+// that then has to be cancelled.
+export async function reserveAndCharge(input, slot, segment, request = squareRequest) {
+  const customerId = await findOrCreateCustomer(input, request);
+
+  let payment;
+  try {
+    const result = await request("/v2/payments", {
+      body: {
+        source_id: input.sourceId,
+        idempotency_key: `${input.idempotencyKey}-payment`,
+        amount_money: { amount: input.service.priceCents, currency: "USD" },
+        location_id: SQUARE_LOCATION_ID,
+        customer_id: customerId,
+        buyer_email_address: input.email,
+        note: `${input.service.name} appointment`,
+        autocomplete: false,
+      },
+    });
+    payment = result.payment;
+  } catch (error) {
+    if (isUncertain(error)) return pendingResponse("payment status");
+    return jsonResponse(402, {
+      error: "Payment wasn't accepted and your card wasn't charged. Check your card details or use another card.",
+      retryable: true,
+    });
+  }
+  if (!payment?.id || payment.status !== "APPROVED") {
+    if (payment?.id && await voidPayment(payment, request)) {
+      return jsonResponse(402, {
+        error: "Payment wasn't accepted and your card wasn't charged. Check your card details or use another card.",
+        retryable: true,
+      });
+    }
+    return pendingResponse("payment status");
+  }
+
+  const customerNote = input.locationType === "VIDEO_CONFERENCE"
+    ? "Booked through askremodel.com as a video consultation."
+    : "Booked through askremodel.com at the customer's location.";
+  let booking;
+  try {
+    const result = await request("/v2/bookings", {
+      body: {
+        idempotency_key: `${input.idempotencyKey}-booking`,
+        booking: {
+          start_at: slot.start_at,
+          location_id: SQUARE_LOCATION_ID,
+          // Square's booking location types are business, customer, or phone (no video),
+          // so video calls leave it unset; the customer note records "video consultation".
+          ...(input.locationType === "CUSTOMER_LOCATION" ? { location_type: "CUSTOMER_LOCATION" } : {}),
+          ...(input.address ? { address: input.address } : {}),
+          customer_id: customerId,
+          customer_note: customerNote,
+          appointment_segments: [{
+            duration_minutes: segment.duration_minutes,
+            service_variation_id: segment.service_variation_id,
+            service_variation_version: segment.service_variation_version,
+            team_member_id: segment.team_member_id,
+          }],
+        },
+      },
+    });
+    booking = result.booking;
+    if (!booking?.id) throw new SquareError("Square couldn't confirm the appointment.", 502);
+  } catch (error) {
+    if (isUncertain(error)) return pendingResponse("appointment");
+    if (await voidPayment(payment, request)) {
+      return jsonResponse(409, {
+        error: "Square couldn't reserve that time, and your card wasn't charged. Find times again and choose another.",
+        retryable: true,
+      });
+    }
+    return jsonResponse(503, {
+      error: `Square couldn't reserve that time. Don't submit again; call ${CALL} so we can make sure your card isn't charged.`,
+      pending: true,
+    });
+  }
+
+  let completed;
+  try {
+    const result = await request(`/v2/payments/${encodeURIComponent(payment.id)}/complete`, { body: {} });
+    completed = result.payment;
+  } catch (error) {
+    if (isUncertain(error)) return pendingResponse("payment status");
+    const released = await cancelBooking(booking, input.idempotencyKey, request);
+    const voided = await voidPayment(payment, request);
+    if (released && voided) {
+      return jsonResponse(402, {
+        error: "The payment couldn't be completed, so the appointment was released and your card wasn't charged. Try again or use another card.",
+        retryable: true,
+      });
+    }
+    return jsonResponse(503, {
+      error: `The payment couldn't be completed. Please call ${CALL} before trying again so we can check the appointment.`,
+      pending: true,
+    });
+  }
+
+  if (completed?.status !== "COMPLETED") {
+    return jsonResponse(202, {
+      error: `The payment is still processing. Don't submit again; call ${CALL} so we can verify your appointment.`,
+      pending: true,
+    });
+  }
+
+  return jsonResponse(200, {
+    bookingId: booking.id,
+    startAt: booking.start_at || slot.start_at,
+    service: input.service.name,
+    amountCents: input.service.priceCents,
+    paymentStatus: completed.status,
+    timeZone: SQUARE_TIME_ZONE,
+  });
 }
 
 export default async function handler(request) {
   if (request.method !== "POST") return methodNotAllowed("POST");
   if (!isSameOrigin(request)) return jsonResponse(403, { error: "This booking request isn't allowed." });
 
-  let booking;
-  let input;
   try {
-    input = validateRequest(await parseJsonBody(request));
+    const input = validateRequest(await parseJsonBody(request));
     if (input.address) {
       const area = await checkServiceArea(input.address);
       if (!area.within) return jsonResponse(400, { error: serviceAreaMessage(area) });
@@ -144,94 +291,7 @@ export default async function handler(request) {
       return jsonResponse(409, { error: "That time was just booked. Choose another available time." });
     }
 
-    const customerResult = await squareRequest("/v2/customers", {
-      body: {
-        idempotency_key: `${input.idempotencyKey}-customer`,
-        given_name: input.givenName,
-        family_name: input.familyName,
-        email_address: input.email,
-        phone_number: input.phone,
-        ...(input.address ? { address: input.address } : {}),
-      },
-    });
-    if (!customerResult.customer?.id) {
-      throw new SquareError("Square couldn't create the customer record. Please try again.", 502);
-    }
-
-    const customerNote = input.locationType === "VIDEO_CONFERENCE"
-      ? "Booked through askremodel.com as a video consultation."
-      : "Booked through askremodel.com at the customer's location.";
-    const bookingResult = await squareRequest("/v2/bookings", {
-      body: {
-        idempotency_key: `${input.idempotencyKey}-booking`,
-        booking: {
-          start_at: slot.start_at,
-          location_id: SQUARE_LOCATION_ID,
-          // Square's booking location types are business, customer, or phone (no video),
-          // so video calls leave it unset; the customer note records "video consultation".
-          ...(input.locationType === "CUSTOMER_LOCATION" ? { location_type: "CUSTOMER_LOCATION" } : {}),
-          ...(input.address ? { address: input.address } : {}),
-          customer_id: customerResult.customer.id,
-          customer_note: customerNote,
-          appointment_segments: [{
-            duration_minutes: segment.duration_minutes,
-            service_variation_id: segment.service_variation_id,
-            service_variation_version: segment.service_variation_version,
-            team_member_id: segment.team_member_id,
-          }],
-        },
-      },
-    });
-    booking = bookingResult.booking;
-    if (!booking?.id) throw new SquareError("Square couldn't confirm the appointment. Please try again.", 502);
-
-    let paymentResult;
-    try {
-      paymentResult = await squareRequest("/v2/payments", {
-        body: {
-          source_id: input.sourceId,
-          idempotency_key: `${input.idempotencyKey}-payment`,
-          amount_money: { amount: input.service.priceCents, currency: "USD" },
-          location_id: SQUARE_LOCATION_ID,
-          customer_id: customerResult.customer.id,
-          buyer_email_address: input.email,
-          reference_id: booking.id.slice(0, 40),
-          note: `${input.service.name} appointment`,
-          autocomplete: true,
-        },
-      });
-    } catch (error) {
-      if (error instanceof SquareError && error.uncertain) {
-        return jsonResponse(503, {
-          error: "We couldn't confirm the payment status. Don't submit again; call (513) 409-1625 so we can verify it.",
-          pending: true,
-        });
-      }
-      const released = await cancelBooking(booking, input.idempotencyKey);
-      return jsonResponse(402, {
-        error: released
-          ? "Payment wasn't accepted and no charge was completed. Check your card details or use another card."
-          : "Payment wasn't accepted. Please call (513) 409-1625 before trying again so we can check the appointment.",
-        retryable: released,
-        pending: !released,
-      });
-    }
-
-    if (paymentResult.payment?.status !== "COMPLETED") {
-      return jsonResponse(202, {
-        error: "The payment is still processing. Don't submit again; call (513) 409-1625 so we can verify your appointment.",
-        pending: true,
-      });
-    }
-
-    return jsonResponse(200, {
-      bookingId: booking.id,
-      startAt: booking.start_at || slot.start_at,
-      service: input.service.name,
-      amountCents: input.service.priceCents,
-      paymentStatus: paymentResult.payment.status,
-      timeZone: SQUARE_TIME_ZONE,
-    });
+    return await reserveAndCharge(input, slot, segment);
   } catch (error) {
     const result = publicError(error);
     return jsonResponse(result.statusCode, {

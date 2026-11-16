@@ -1,6 +1,6 @@
 import { isSameOrigin, jsonResponse, methodNotAllowed, parseJsonBody, publicError } from "../lib/square.mjs";
 import { checkServiceArea, serviceAreaMessage } from "../lib/service-area.mjs";
-import { validAddress } from "./square-book.mjs";
+import { validAddress } from "../lib/address.mjs";
 
 // Lets the booking page tell a customer whether their address is in the
 // at-home service area before they enter a card. square-book re-checks.

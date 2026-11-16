@@ -1,5 +1,7 @@
-# Static site, no build step: Netlify publishes the repo root as-is.
+# Static site: Netlify publishes the repo root as-is (the build step only runs tests).
 [build]
+  # Runs the tests (including the price-match check) before each deploy; a failure stops the deploy.
+  command = "npm test"
   publish = "."
   functions = "netlify/functions"
 

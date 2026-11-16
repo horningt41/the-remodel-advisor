@@ -21,7 +21,7 @@ Shared pieces are filled in by JS: `<span data-icon="name">` becomes an icon, an
 
 ## Before launch
 
-- [ ] **Square booking:** Ted connects his account (setup link below), then makes and refunds one real test booking
+- [ ] **Square booking:** Ted connects (or reconnects, to grant the new customer-lookup permission) his account using the setup link below, then makes and refunds one real test booking
 - [ ] **Photos:** every "Photo needed" placeholder (hero, about, services, gallery)
 - [ ] **Reviews:** replace the three "Sample review" cards on the home page with real ones, or remove the section
 - [ ] **Woodworking page:** real photos with wood/size/finish captions, starting prices, deposit, lead times, delivery/shipping, guarantee, joinery, follow-up time (all flagged `.todo` or "Photo needed"); add an email notification for the `woodworking-request` form in Netlify
@@ -39,14 +39,15 @@ Shared pieces are filled in by JS: `<span data-icon="name">` becomes an icon, an
 | --- | --- |
 | `square-config` | Tells the page whether Square is connected (`ready`) |
 | `square-availability` | Open times for a service on a date |
-| `square-book` | Creates the customer and appointment, charges the card, cancels the appointment if the charge fails |
-| `square-oauth-start` / `square-oauth-callback` | One-time connection to Ted's Square account (OAuth, buyer-level scopes, so it works on Square Appointments Free) |
+| `square-service-area` | Tells the page whether an at-home address is within 25 miles of ZIP 45150, before the customer pays |
+| `square-book` | Finds or creates the Square customer (by email), puts a hold on the card, creates the appointment, then captures the payment. A declined card never creates an appointment; if booking or capture fails, the hold is voided and the appointment released |
+| `square-oauth-start` / `square-oauth-callback` | One-time connection to Ted's Square account (OAuth, buyer-level appointment scopes, so it works on Square Appointments Free; `CUSTOMERS_READ` lets it reuse returning customers instead of creating duplicates) |
 
 Netlify environment variables: `SQUARE_ENVIRONMENT=production`, `SQUARE_APPLICATION_ID`, `SQUARE_APPLICATION_SECRET`, `SQUARE_LOCATION_ID`, `SQUARE_OAUTH_SETUP_KEY` (password for the connect link, username `square-admin`), and optionally `SQUARE_MERCHANT_ID` to lock the connection to Ted's account. Tokens live in Netlify Blobs (`square-booking-production`) and refresh automatically.
 
 To connect or reconnect: open `/.netlify/functions/square-oauth-start`, sign in with `square-admin` and the setup key, then approve in Square. You land on `/book?square=connected`.
 
-If Square isn't connected, the page falls back to a "Continue to Square" button for the hosted booking page (links in `SITE.booking`). Prices are hard-coded in both `js/components.js` and `netlify/lib/square.mjs`, and must match Square.
+If Square isn't connected, the page falls back to a "Continue to Square" button for the hosted booking page (links in `SITE.booking`). Prices are hard-coded in both `js/components.js` and `netlify/lib/square.mjs`, and must match Square. `tests/prices.test.mjs` checks the two files match, and Netlify runs `npm test` before every deploy, so a mismatch stops the deploy.
 
 ## Local preview
 

@@ -16,6 +16,17 @@ export function shippingFeeCents(value = process.env.SQUARE_SHOP_SHIPPING_CENTS)
   return Number.isInteger(cents) && cents >= 0 ? cents : null;
 }
 
+// Added for each piece after the first in one order (several boards weigh more to ship).
+// Unset means no extra charge.
+export function shippingExtraCents(value = process.env.SQUARE_SHOP_SHIPPING_EXTRA_CENTS) {
+  return shippingFeeCents(value) ?? 0;
+}
+
+// Shipping for a quantity: the flat fee for the first piece plus the extra for each one after.
+export function shippingFor(quantity, feeCents, extraCents = 0) {
+  return feeCents === null ? null : feeCents + extraCents * Math.max(0, quantity - 1);
+}
+
 function presentAt(object, locationId) {
   if (object.present_at_all_locations === false) {
     return (object.present_at_location_ids || []).includes(locationId);
@@ -215,6 +226,7 @@ export async function createCheckout(input, {
   listings,
   locationId = SQUARE_LOCATION_ID,
   shippingCents = shippingFeeCents(),
+  extraShippingCents = shippingExtraCents(),
   origin = SITE_ORIGIN,
 } = {}) {
   const checkout = validateCheckout(input);
@@ -236,6 +248,7 @@ export async function createCheckout(input, {
   // Taxes are set on the order (scope ORDER) rather than auto-applied, so the same rate
   // also covers the shipping charge, and out-of-state shipments can leave them off.
   const taxed = chargesOhioTax(checkout);
+  const shippingCharge = ship ? shippingFor(quantity, shippingCents, extraShippingCents) : 0;
   const how = !ship
     ? "Local pickup or delivery in Greater Cincinnati"
     : shipTo === "ohio" ? "Ship to an Ohio address" : "Ship outside Ohio (no Ohio sales tax)";
@@ -246,11 +259,11 @@ export async function createCheckout(input, {
         location_id: locationId,
         line_items: [{ catalog_object_id: variationId, quantity: String(quantity), note: how }],
         taxes: taxed ? item.taxIds.map((id, index) => ({ uid: `tax-${index}`, catalog_object_id: id, scope: "ORDER" })) : [],
-        ...(ship && shippingCents > 0 ? {
+        ...(shippingCharge > 0 ? {
           service_charges: [{
             uid: "shipping",
             name: "Shipping",
-            amount_money: { amount: shippingCents, currency: "USD" },
+            amount_money: { amount: shippingCharge, currency: "USD" },
             calculation_phase: "SUBTOTAL_PHASE",
             taxable: taxed,
           }],

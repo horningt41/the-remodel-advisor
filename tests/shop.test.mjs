@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SquareError } from "../netlify/lib/square.mjs";
-import { createCheckout, loadListings, selectShopItems, shippingFeeCents, toListings } from "../netlify/lib/shop.mjs";
+import { createCheckout, loadListings, selectShopItems, shippingExtraCents, shippingFeeCents, shippingFor, toListings } from "../netlify/lib/shop.mjs";
 
 const LOC = "LOC1";
 const category = (id, name) => ({ type: "CATEGORY", id, category_data: { name } });
@@ -81,6 +81,11 @@ test("reads the shipping charge from settings", () => {
   assert.equal(shippingFeeCents("0"), 0);
   assert.equal(shippingFeeCents("1500"), 1500);
   assert.equal(shippingFeeCents("12.50"), null);
+  assert.equal(shippingExtraCents(undefined), 0);
+  assert.equal(shippingExtraCents("500"), 500);
+  assert.equal(shippingFor(1, 1000, 500), 1000);
+  assert.equal(shippingFor(4, 1000, 500), 2500);
+  assert.equal(shippingFor(3, null, 500), null);
 });
 
 test("loads the catalog and stock from Square", async () => {
@@ -109,7 +114,7 @@ function fakeCheckout() {
   return { request, calls };
 }
 
-const checkoutOptions = (square) => ({ request: square.request, listings: listings(), locationId: LOC, shippingCents: 1500, origin: "https://askremodel.com" });
+const checkoutOptions = (square) => ({ request: square.request, listings: listings(), locationId: LOC, shippingCents: 1500, extraShippingCents: 0, origin: "https://askremodel.com" });
 const OHIO_TAX = [{ uid: "tax-0", catalog_object_id: "TAX_OH", scope: "ORDER" }];
 
 test("ships within Ohio with Ohio tax on the piece and the shipping", async () => {
@@ -151,6 +156,12 @@ test("charges Ohio tax on pickup, with no shipping", async () => {
   assert.equal(options.ask_for_shipping_address, false);
   assert.match(order.line_items[0].note, /pickup/i);
   assert.equal(options.redirect_url, "https://askremodel.com/order-thanks?delivery=pickup");
+});
+
+test("adds the extra shipping charge for each piece after the first", async () => {
+  const square = fakeCheckout();
+  await createCheckout({ variationId: "VAR_BOARD_S", quantity: 3, delivery: "ship", shipTo: "other" }, { ...checkoutOptions(square), shippingCents: 1000, extraShippingCents: 500 });
+  assert.equal(square.calls[0].body.order.service_charges[0].amount_money.amount, 2000);
 });
 
 test("free shipping adds no shipping charge", async () => {

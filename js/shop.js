@@ -172,13 +172,23 @@
       quantitySelect.replaceChildren(...Array.from({ length: Math.max(max, 1) }, (_, i) => el("option", { value: String(i + 1), text: String(i + 1) })));
       quantityField.hidden = max <= 1;
     }
-    variationSelect.addEventListener("change", syncVariation);
+    const canShip = shipping.offered && !item.pickupOnly;
+    const extra = shipping.extraCents || 0;
+    // Shows the shipping total for the chosen quantity: the flat fee plus the extra per added piece.
+    function syncShipping() {
+      if (!canShip) return;
+      const quantity = Number(quantitySelect.value || 1);
+      const cents = shipping.feeCents + extra * (quantity - 1);
+      shipLabel.textContent = cents ? "Ship it to me (" + money(cents) + ")" : "Ship it to me (free)";
+      shipNote.textContent = (extra ? money(shipping.feeCents) + " for the first piece, " + money(extra) + " for each one after. " : "")
+        + "You'll enter the address at checkout.";
+    }
+    variationSelect.addEventListener("change", () => { syncVariation(); syncShipping(); });
+    quantitySelect.addEventListener("change", syncShipping);
     syncVariation();
 
-    const canShip = shipping.offered && !item.pickupOnly;
     if (canShip) {
-      shipLabel.textContent = shipping.feeCents ? "Ship it to me (" + money(shipping.feeCents) + ")" : "Ship it to me (free)";
-      shipNote.textContent = "You'll enter the address at checkout.";
+      syncShipping();
     } else {
       shipOption.disabled = true;
       shipLabel.textContent = "Shipping";

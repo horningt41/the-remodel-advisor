@@ -1,5 +1,5 @@
 import { hasSquareConfig, jsonResponse, methodNotAllowed, SquareError } from "../lib/square.mjs";
-import { cachedListings, shippingFeeCents } from "../lib/shop.mjs";
+import { cachedListings, shippingExtraCents, shippingFeeCents } from "../lib/shop.mjs";
 
 // Public list of pieces for sale, read from the "Shop" category in Square.
 // ?id=ITEM_ID returns just that piece.
@@ -11,7 +11,7 @@ export default async function handler(request) {
     // Tax ids are only needed at checkout; keep them out of the public listing.
     const listings = (await cachedListings()).map(({ taxIds, ...listing }) => listing);
     const shippingCents = shippingFeeCents();
-    const shipping = { offered: shippingCents !== null, feeCents: shippingCents };
+    const shipping = { offered: shippingCents !== null, feeCents: shippingCents, extraCents: shippingExtraCents() };
     const id = new URL(request.url).searchParams.get("id");
     const headers = { "Cache-Control": "public, max-age=60" };
 

@@ -76,12 +76,12 @@ test("honors Square's sold-out switch even without inventory tracking", () => {
 });
 
 test("reads the shipping charge from settings", () => {
-  assert.equal(shippingFeeCents(undefined), null);
+  assert.equal(shippingFeeCents(null), null);
   assert.equal(shippingFeeCents(""), null);
   assert.equal(shippingFeeCents("0"), 0);
   assert.equal(shippingFeeCents("1500"), 1500);
   assert.equal(shippingFeeCents("12.50"), null);
-  assert.equal(shippingExtraCents(undefined), 0);
+  assert.equal(shippingExtraCents(null), 0);
   assert.equal(shippingExtraCents("500"), 500);
   assert.equal(shippingFor(1, 1000, 500), 1000);
   assert.equal(shippingFor(4, 1000, 500), 2500);
@@ -173,7 +173,7 @@ test("free shipping adds no shipping charge", async () => {
 
 test("refuses checkouts the shop can't fill", async () => {
   const square = fakeCheckout();
-  const options = { request: square.request, listings: listings(), locationId: LOC, shippingCents: 1500 };
+  const options = { request: square.request, listings: listings(), locationId: LOC, shippingCents: 1500, extraShippingCents: 0 };
   const rejects = (input, pattern) => assert.rejects(
     createCheckout(input, options),
     (error) => error instanceof SquareError && pattern.test(error.message),

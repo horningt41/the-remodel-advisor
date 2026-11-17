@@ -671,6 +671,7 @@ strong { font-weight: 600; }
 .species li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 16px; padding: 12px 0; border-bottom: 1px dashed var(--line); }
 .species li:first-child { padding-top: 0; }
 .species li:last-child { border-bottom: 0; padding-bottom: 0; }
+.species + p { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--line); font-size: 0.95rem; }
 .species__name { font: 600 1.05rem var(--font-head); }
 .species__note { font: 500 0.8rem var(--font-mono); color: var(--ink-2); }
 .craft__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }

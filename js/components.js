@@ -14,6 +14,7 @@
 
   const SITE = {
     name: "The Remodel Advisor",
+    legalName: "The Remodel Advisor LLC",
     phone: "(513) 409-1625",
     phoneHref: "tel:+15134091625",
     // No working email yet (theremodeladvisor.com is not owned). Leave empty to hide it.
@@ -141,7 +142,7 @@
           </div>
         </div>
         <div class="footer__bottom">
-          <span>&copy; ${new Date().getFullYear()} ${SITE.name}. All rights reserved.</span>
+          <span>&copy; ${new Date().getFullYear()} ${SITE.legalName}. All rights reserved.</span>
           <ul>
             <li><a href="/terms">Terms</a></li>
             <li><a href="/privacy">Privacy</a></li>

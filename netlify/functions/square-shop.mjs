@@ -8,7 +8,8 @@ export default async function handler(request) {
   if (!hasSquareConfig()) return jsonResponse(503, { error: "The shop isn't connected yet." });
 
   try {
-    const listings = await cachedListings();
+    // Tax ids are only needed at checkout; keep them out of the public listing.
+    const listings = (await cachedListings()).map(({ taxIds, ...listing }) => listing);
     const shippingCents = shippingFeeCents();
     const shipping = { offered: shippingCents !== null, feeCents: shippingCents };
     const id = new URL(request.url).searchParams.get("id");

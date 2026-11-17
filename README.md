@@ -61,7 +61,7 @@ Listings live in Square, not in this repo. To list a piece, add an item in Squar
 | `square-shop` | Public list of Shop items (or one, with `?id=`), with stock from Square inventory |
 | `square-shop-checkout` | Re-checks stock, then creates a Square-hosted checkout page (Checkout API payment link) and returns its URL |
 
-Buyers choose local pickup/delivery or shipping on the piece page. Shipping uses Square's address form and a flat `SQUARE_SHOP_SHIPPING_CENTS` charge (unset = no shipping offered, `0` = free). Taxes come from the tax settings on each Square item. Orders and payments appear in the Square Dashboard; pickup orders carry a "Local pickup or delivery" note. Optional overrides: `SQUARE_SHOP_CATEGORY`, `SQUARE_PICKUP_CATEGORY`.
+Buyers choose local pickup/delivery or shipping on the piece page. Shipping uses Square's address form and a flat `SQUARE_SHOP_SHIPPING_CENTS` charge (unset = no shipping offered, `0` = free). Sales tax follows Ohio's rules for an Ohio seller: pickup, local delivery and shipments to Ohio are charged the tax set on the Square item (set it to your county's total rate), and that tax also covers the shipping charge. Buyers shipping to another state choose "Another state" and pay no tax; each order carries a note saying which option they chose, so check the address matches. Orders and payments appear in the Square Dashboard; pickup orders carry a "Local pickup or delivery" note. Optional overrides: `SQUARE_SHOP_CATEGORY`, `SQUARE_PICKUP_CATEGORY`.
 
 ## Local preview
 

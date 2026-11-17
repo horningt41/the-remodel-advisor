@@ -775,4 +775,4 @@ strong { font-weight: 600; }
 .piece__aside p { margin: 0; color: var(--ink-2); }
 @media (max-width: 880px) { .piece { grid-template-columns: minmax(0, 1fr); } .piece__panel { position: static; } }
 /* These set their own display, which would otherwise override the hidden attribute */
-.field[hidden], .shop[hidden], .piece[hidden], .shop-status[hidden] { display: none; }
+.field[hidden], .shop[hidden], .piece[hidden], .shop-status[hidden], .piece__delivery[hidden] { display: none; }

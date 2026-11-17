@@ -54,6 +54,9 @@ export function selectShopItems(objects, locationId = SQUARE_LOCATION_ID) {
     .map((object) => object.id));
   const shopIds = categoryIds(SHOP_CATEGORY);
   const pickupIds = categoryIds(PICKUP_CATEGORY);
+  const enabledTaxIds = new Set(objects
+    .filter((object) => object.type === "TAX" && !object.is_deleted && object.tax_data?.enabled !== false && presentAt(object, locationId))
+    .map((object) => object.id));
   const images = new Map(objects
     .filter((object) => object.type === "IMAGE" && object.image_data?.url)
     .map((object) => [object.id, object.image_data.url]));
@@ -91,6 +94,7 @@ export function selectShopItems(objects, locationId = SQUARE_LOCATION_ID) {
       description: data.description_plaintext?.trim() || plainText(data.description),
       images: (data.image_ids || []).map((id) => images.get(id)).filter(Boolean),
       pickupOnly: [...categories].some((id) => pickupIds.has(id)),
+      taxIds: (data.tax_ids || []).filter((id) => enabledTaxIds.has(id)),
       variations,
     });
   }
@@ -119,6 +123,7 @@ export function toListings(items, stock = new Map()) {
         description: item.description,
         images: item.images,
         pickupOnly: item.pickupOnly,
+        taxIds: item.taxIds || [],
         oneOfAKind: variations.length === 1 && item.variations[0].tracksInventory && variations[0].maxQuantity <= 1,
         priceFromCents: Math.min(...prices),
         priceToCents: Math.max(...prices),
@@ -133,7 +138,7 @@ async function fetchCatalog(request) {
   const objects = [];
   let cursor;
   for (let page = 0; page < 20; page += 1) {
-    const query = new URLSearchParams({ types: "ITEM,IMAGE,CATEGORY" });
+    const query = new URLSearchParams({ types: "ITEM,IMAGE,CATEGORY,TAX" });
     if (cursor) query.set("cursor", cursor);
     const result = await request(`/v2/catalog/list?${query}`, { method: "GET" });
     objects.push(...(result.objects || []));
@@ -185,11 +190,23 @@ export function validateCheckout(input) {
   const variationId = typeof input?.variationId === "string" ? input.variationId.trim() : "";
   const quantity = Number(input?.quantity ?? 1);
   const delivery = input?.delivery;
+  const shipTo = delivery === "ship" ? input?.shipTo : null;
   if (!/^[A-Za-z0-9_-]{4,64}$/.test(variationId) || !Number.isInteger(quantity)
       || quantity < 1 || quantity > MAX_QUANTITY || !["ship", "pickup"].includes(delivery)) {
     throw new SquareError("Check your selection and try again.", 400);
   }
-  return { variationId, quantity, delivery };
+  if (delivery === "ship" && !["ohio", "other"].includes(shipTo)) {
+    throw new SquareError("Choose whether it's shipping to Ohio or another state.", 400);
+  }
+  return { variationId, quantity, delivery, shipTo };
+}
+
+// Ohio sales tax for an Ohio seller is sourced to the seller's location: pickup, local
+// delivery and shipments within Ohio pay the rate set on the Square item, and so does the
+// shipping charge (Ohio taxes delivery of taxable goods). Shipments to other states carry
+// no Ohio tax, and Ted doesn't collect for other states until he passes their thresholds.
+export function chargesOhioTax({ delivery, shipTo }) {
+  return !(delivery === "ship" && shipTo === "other");
 }
 
 // Creates a Square-hosted checkout page for one listing and returns its URL.
@@ -200,7 +217,8 @@ export async function createCheckout(input, {
   shippingCents = shippingFeeCents(),
   origin = SITE_ORIGIN,
 } = {}) {
-  const { variationId, quantity, delivery } = validateCheckout(input);
+  const checkout = validateCheckout(input);
+  const { variationId, quantity, delivery, shipTo } = checkout;
   const all = listings || await loadListings({ request, locationId });
   const item = all.find((listing) => listing.variations.some((variation) => variation.id === variationId));
   const variation = item?.variations.find((entry) => entry.id === variationId);
@@ -215,29 +233,37 @@ export async function createCheckout(input, {
     throw new SquareError("This piece is local pickup or delivery only.", 400);
   }
 
+  // Taxes are set on the order (scope ORDER) rather than auto-applied, so the same rate
+  // also covers the shipping charge, and out-of-state shipments can leave them off.
+  const taxed = chargesOhioTax(checkout);
+  const how = !ship
+    ? "Local pickup or delivery in Greater Cincinnati"
+    : shipTo === "ohio" ? "Ship to an Ohio address" : "Ship outside Ohio (no Ohio sales tax)";
   const result = await request("/v2/online-checkout/payment-links", {
     body: {
       idempotency_key: randomUUID(),
       order: {
         location_id: locationId,
-        line_items: [{
-          catalog_object_id: variationId,
-          quantity: String(quantity),
-          ...(ship ? {} : { note: "Local pickup or delivery in Greater Cincinnati" }),
-        }],
-        pricing_options: { auto_apply_taxes: true },
+        line_items: [{ catalog_object_id: variationId, quantity: String(quantity), note: how }],
+        taxes: taxed ? item.taxIds.map((id, index) => ({ uid: `tax-${index}`, catalog_object_id: id, scope: "ORDER" })) : [],
+        ...(ship && shippingCents > 0 ? {
+          service_charges: [{
+            uid: "shipping",
+            name: "Shipping",
+            amount_money: { amount: shippingCents, currency: "USD" },
+            calculation_phase: "SUBTOTAL_PHASE",
+            taxable: taxed,
+          }],
+        } : {}),
       },
       checkout_options: {
         redirect_url: `${origin}/order-thanks${ship ? "" : "?delivery=pickup"}`,
         ask_for_shipping_address: ship,
-        ...(ship && shippingCents > 0
-          ? { shipping_fee: { name: "Shipping", charge: { amount: shippingCents, currency: "USD" } } }
-          : {}),
         allow_tipping: false,
         enable_coupon: false,
         enable_loyalty: false,
       },
-      payment_note: `askremodel.com shop: ${ship ? "ship to buyer" : "local pickup or delivery"}`,
+      payment_note: `askremodel.com shop: ${how.toLowerCase()}`,
     },
   });
   const url = result.payment_link?.url;

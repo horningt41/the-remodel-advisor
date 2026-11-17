@@ -22,13 +22,15 @@ const catalog = [
   category("CAT_PICKUP", "Pickup only"),
   category("CAT_OTHER", "Services"),
   { type: "IMAGE", id: "IMG1", image_data: { url: "https://items-images.example/board.jpg" } },
+  { type: "TAX", id: "TAX_OH", tax_data: { name: "Sales Tax", percentage: "6.75", enabled: true } },
+  { type: "TAX", id: "TAX_OFF", tax_data: { name: "Old Tax", percentage: "5.75", enabled: false } },
   item("ITEM_BOARD", "Walnut End-Grain Board", ["CAT_SHOP"], [
     variation("VAR_BOARD_S", 9000, { name: "12 x 18 in" }),
     variation("VAR_BOARD_L", 14000, { name: "16 x 22 in" }),
-  ], { image_ids: ["IMG1"], description_plaintext: "Walnut, mineral oil finish." }),
+  ], { image_ids: ["IMG1"], description_plaintext: "Walnut, mineral oil finish.", tax_ids: ["TAX_OH", "TAX_OFF"] }),
   item("ITEM_TABLE", "Live-Edge Coffee Table", ["CAT_SHOP", "CAT_PICKUP"], [
     variation("VAR_TABLE", 120000, { data: { track_inventory: true } }),
-  ], { description: "<p>Cherry slab</p><p>Steel legs</p>" }),
+  ], { description: "<p>Cherry slab</p><p>Steel legs</p>", tax_ids: ["TAX_OH"] }),
   item("ITEM_SOLD", "Maple Bench", ["CAT_SHOP"], [variation("VAR_SOLD", 45000, { data: { track_inventory: true } })]),
   item("ITEM_ARCHIVED", "Old Listing", ["CAT_SHOP"], [variation("VAR_OLD", 1000)], { is_archived: true }),
   item("ITEM_SERVICE", "Estimate Review", ["CAT_OTHER"], [variation("VAR_SVC", 5000)]),
@@ -52,6 +54,7 @@ test("describes each listing for the page", () => {
   assert.equal(board.description, "Walnut, mineral oil finish.");
   assert.equal(board.variations[0].maxQuantity, 10);
   assert.equal(board.oneOfAKind, false);
+  assert.deepEqual(board.taxIds, ["TAX_OH"], "disabled taxes are dropped");
 
   assert.equal(table.pickupOnly, true);
   assert.equal(table.oneOfAKind, true);
@@ -106,33 +109,55 @@ function fakeCheckout() {
   return { request, calls };
 }
 
-test("creates a shipping checkout with taxes and the shipping charge", async () => {
+const checkoutOptions = (square) => ({ request: square.request, listings: listings(), locationId: LOC, shippingCents: 1500, origin: "https://askremodel.com" });
+const OHIO_TAX = [{ uid: "tax-0", catalog_object_id: "TAX_OH", scope: "ORDER" }];
+
+test("ships within Ohio with Ohio tax on the piece and the shipping", async () => {
   const square = fakeCheckout();
-  const result = await createCheckout(
-    { variationId: "VAR_BOARD_L", quantity: 2, delivery: "ship" },
-    { request: square.request, listings: listings(), locationId: LOC, shippingCents: 1500, origin: "https://askremodel.com" },
-  );
+  const result = await createCheckout({ variationId: "VAR_BOARD_L", quantity: 2, delivery: "ship", shipTo: "ohio" }, checkoutOptions(square));
   assert.equal(result.url, "https://square.link/u/abc123");
-  const body = square.calls[0].body;
   assert.equal(square.calls[0].path, "/v2/online-checkout/payment-links");
-  assert.deepEqual(body.order.line_items, [{ catalog_object_id: "VAR_BOARD_L", quantity: "2" }]);
-  assert.equal(body.order.pricing_options.auto_apply_taxes, true);
-  assert.equal(body.checkout_options.ask_for_shipping_address, true);
-  assert.equal(body.checkout_options.shipping_fee.charge.amount, 1500);
-  assert.equal(body.checkout_options.redirect_url, "https://askremodel.com/order-thanks");
+  const { order, checkout_options: options } = square.calls[0].body;
+  assert.equal(order.line_items[0].catalog_object_id, "VAR_BOARD_L");
+  assert.equal(order.line_items[0].quantity, "2");
+  assert.match(order.line_items[0].note, /Ohio address/);
+  assert.deepEqual(order.taxes, OHIO_TAX);
+  assert.equal("pricing_options" in order, false, "taxes are set explicitly, not auto-applied");
+  assert.deepEqual(order.service_charges, [{
+    uid: "shipping", name: "Shipping", amount_money: { amount: 1500, currency: "USD" },
+    calculation_phase: "SUBTOTAL_PHASE", taxable: true,
+  }]);
+  assert.equal(options.ask_for_shipping_address, true);
+  assert.equal("shipping_fee" in options, false);
+  assert.equal(options.redirect_url, "https://askremodel.com/order-thanks");
 });
 
-test("creates a pickup checkout without a shipping address", async () => {
+test("ships to another state without Ohio tax", async () => {
   const square = fakeCheckout();
-  await createCheckout(
-    { variationId: "VAR_TABLE", quantity: 1, delivery: "pickup" },
-    { request: square.request, listings: listings(), locationId: LOC, shippingCents: 1500, origin: "https://askremodel.com" },
-  );
-  const body = square.calls[0].body;
-  assert.equal(body.checkout_options.ask_for_shipping_address, false);
-  assert.equal("shipping_fee" in body.checkout_options, false);
-  assert.match(body.order.line_items[0].note, /pickup/i);
-  assert.equal(body.checkout_options.redirect_url, "https://askremodel.com/order-thanks?delivery=pickup");
+  await createCheckout({ variationId: "VAR_BOARD_S", quantity: 1, delivery: "ship", shipTo: "other" }, checkoutOptions(square));
+  const { order, payment_note: note } = square.calls[0].body;
+  assert.deepEqual(order.taxes, []);
+  assert.equal(order.service_charges[0].taxable, false);
+  assert.match(order.line_items[0].note, /outside Ohio/);
+  assert.match(note, /outside ohio/);
+});
+
+test("charges Ohio tax on pickup, with no shipping", async () => {
+  const square = fakeCheckout();
+  await createCheckout({ variationId: "VAR_TABLE", quantity: 1, delivery: "pickup", shipTo: "other" }, checkoutOptions(square));
+  const { order, checkout_options: options } = square.calls[0].body;
+  assert.deepEqual(order.taxes, OHIO_TAX, "shipTo is ignored for pickup");
+  assert.equal("service_charges" in order, false);
+  assert.equal(options.ask_for_shipping_address, false);
+  assert.match(order.line_items[0].note, /pickup/i);
+  assert.equal(options.redirect_url, "https://askremodel.com/order-thanks?delivery=pickup");
+});
+
+test("free shipping adds no shipping charge", async () => {
+  const square = fakeCheckout();
+  await createCheckout({ variationId: "VAR_BOARD_S", quantity: 1, delivery: "ship", shipTo: "ohio" }, { ...checkoutOptions(square), shippingCents: 0 });
+  assert.equal("service_charges" in square.calls[0].body.order, false);
+  assert.deepEqual(square.calls[0].body.order.taxes, OHIO_TAX);
 });
 
 test("refuses checkouts the shop can't fill", async () => {
@@ -144,11 +169,13 @@ test("refuses checkouts the shop can't fill", async () => {
   );
   await rejects({ variationId: "VAR_SOLD", quantity: 1, delivery: "pickup" }, /just sold/);
   await rejects({ variationId: "VAR_TABLE", quantity: 2, delivery: "pickup" }, /Only 1 available/);
-  await rejects({ variationId: "VAR_TABLE", quantity: 1, delivery: "ship" }, /pickup or delivery only/);
+  await rejects({ variationId: "VAR_TABLE", quantity: 1, delivery: "ship", shipTo: "ohio" }, /pickup or delivery only/);
+  await rejects({ variationId: "VAR_BOARD_S", quantity: 1, delivery: "ship" }, /Ohio or another state/);
+  await rejects({ variationId: "VAR_BOARD_S", quantity: 1, delivery: "ship", shipTo: "texas" }, /Ohio or another state/);
   await rejects({ variationId: "VAR_SVC", quantity: 1, delivery: "pickup" }, /no longer listed/);
   await rejects({ variationId: "VAR_BOARD_S", quantity: 0, delivery: "pickup" }, /Check your selection/);
   await assert.rejects(
-    createCheckout({ variationId: "VAR_BOARD_S", quantity: 1, delivery: "ship" }, { ...options, shippingCents: null }),
+    createCheckout({ variationId: "VAR_BOARD_S", quantity: 1, delivery: "ship", shipTo: "ohio" }, { ...options, shippingCents: null }),
     /pickup or delivery only/,
   );
   assert.equal(square.calls.length, 0);

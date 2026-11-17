@@ -60,9 +60,20 @@
                   <span><span id="delivery-ship-label">Ship it to me</span><small id="delivery-ship-note"></small></span>
                 </label>
               </fieldset>
+              <fieldset class="piece__delivery" id="shipto-field" hidden>
+                <legend>Where is it shipping?</legend>
+                <label for="shipto-ohio">
+                  <input type="radio" id="shipto-ohio" name="shipTo" value="ohio">
+                  <span>An Ohio address<small>Ohio sales tax applies to the piece and shipping.</small></span>
+                </label>
+                <label for="shipto-other">
+                  <input type="radio" id="shipto-other" name="shipTo" value="other">
+                  <span>Another state<small>No Ohio sales tax. The order must ship outside Ohio.</small></span>
+                </label>
+              </fieldset>
               <button class="btn btn--block" id="piece-buy" type="submit">Buy Now</button>
               <p class="booking-status" id="buy-status" role="status" hidden></p>
-              <p class="piece__fine">Checkout is handled securely by Square. Sales tax is added at checkout where it applies.</p>
+              <p class="piece__fine">Checkout is handled securely by Square. Ohio sales tax is added for pickup, local delivery, and Ohio shipments.</p>
             </form>
 
             <div class="piece__aside">

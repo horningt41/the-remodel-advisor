@@ -146,6 +146,7 @@
     const shipLabel = document.getElementById("delivery-ship-label");
     const shipNote = document.getElementById("delivery-ship-note");
     const pickupOption = document.getElementById("delivery-pickup");
+    const shipToField = document.getElementById("shipto-field");
     const buy = document.getElementById("piece-buy");
     const buyStatus = document.getElementById("buy-status");
     const tags = document.getElementById("piece-tags");
@@ -185,6 +186,11 @@
       pickupOption.checked = true;
     }
 
+    // Shipping asks Ohio or another state: Ohio addresses pay Ohio sales tax, others don't.
+    const syncDelivery = () => { shipToField.hidden = !shipOption.checked; };
+    for (const option of [shipOption, pickupOption]) option.addEventListener("change", syncDelivery);
+    syncDelivery();
+
     if (item.soldOut) {
       buy.disabled = true;
       buy.textContent = "Sold";
@@ -196,6 +202,15 @@
       event.preventDefault();
       const variation = selected();
       if (!variation?.available) return;
+      const delivery = form.querySelector('input[name="delivery"]:checked').value;
+      const shipTo = form.querySelector('input[name="shipTo"]:checked')?.value;
+      if (delivery === "ship" && !shipTo) {
+        buyStatus.hidden = false;
+        buyStatus.className = "booking-status booking-status--error";
+        buyStatus.textContent = "Choose whether it's shipping to Ohio or another state.";
+        document.getElementById("shipto-ohio").focus();
+        return;
+      }
       buy.disabled = true;
       buyStatus.hidden = false;
       buyStatus.className = "booking-status";
@@ -207,7 +222,8 @@
           body: JSON.stringify({
             variationId: variation.id,
             quantity: Number(quantitySelect.value || 1),
-            delivery: form.querySelector('input[name="delivery"]:checked').value,
+            delivery,
+            ...(delivery === "ship" ? { shipTo } : {}),
           }),
         });
         const result = await response.json().catch(() => ({}));
